@@ -272,8 +272,8 @@ export default function Room() {
                 ) : null;
               })}
 
-              {/* Empty slots */}
-              {Array.from({ length: Math.max(0, 6 - 1 - Object.keys(remoteStreams).length) }).map((_, index) => (
+              {/* Empty slots - only show when there are other participants */}
+              {participants.length > 1 && Array.from({ length: Math.min(2, Math.max(0, 6 - 1 - Object.keys(remoteStreams).length)) }).map((_, index) => (
                 <div
                   key={index}
                   className="video-tile aspect-video relative bg-muted border-2 border-dashed border-border flex items-center justify-center"
