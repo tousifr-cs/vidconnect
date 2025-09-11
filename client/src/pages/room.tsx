@@ -23,6 +23,13 @@ export default function Room() {
   const [meetingDuration, setMeetingDuration] = useState("00:00");
   const { toast } = useToast();
 
+  const {
+    participants,
+    isConnected,
+    sendMessage,
+    peerId
+  } = useWebSocket(roomId!, username, handleWebRTCMessage);
+
   const { 
     localStream, 
     remoteStreams, 
@@ -30,14 +37,28 @@ export default function Room() {
     isVideoEnabled,
     toggleAudio,
     toggleVideo,
-    endCall
-  } = useWebRTC();
+    endCall,
+    webrtcManager
+  } = useWebRTC(sendMessage, peerId);
 
-  const {
-    participants,
-    isConnected,
-    sendMessage
-  } = useWebSocket(roomId!, username);
+  // Handle WebRTC signaling messages
+  function handleWebRTCMessage(message: any) {
+    if (webrtcManager) {
+      switch (message.type) {
+        case 'peer-joined':
+          // Initiate connection to new peer
+          webrtcManager.initiateConnection(message.peerId);
+          break;
+        case 'peer-left':
+          // Remove peer connection
+          webrtcManager.removePeerConnection(message.peerId);
+          break;
+        default:
+          // Handle WebRTC signaling messages
+          webrtcManager.handleWebSocketMessage(message);
+      }
+    }
+  }
 
   // Fetch room details
   const { data: roomData, error } = useQuery({

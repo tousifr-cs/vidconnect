@@ -1,11 +1,18 @@
+import type { WSMessage } from "@shared/schema";
+
 export class WebRTCManager {
   private localStream: MediaStream;
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
   public onRemoteStream?: (peerId: string, stream: MediaStream) => void;
   public onRemoteStreamRemoved?: (peerId: string) => void;
+  public onSendMessage?: (message: WSMessage) => void;
+  private myPeerId: string;
+  private roomId: string;
 
-  constructor(localStream: MediaStream) {
+  constructor(localStream: MediaStream, peerId: string, roomId: string) {
     this.localStream = localStream;
+    this.myPeerId = peerId;
+    this.roomId = roomId;
   }
 
   async createPeerConnection(peerId: string): Promise<RTCPeerConnection> {
@@ -33,9 +40,13 @@ export class WebRTCManager {
 
     // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        // In a real implementation, send this candidate to the remote peer via signaling
-        console.log('ICE candidate:', event.candidate);
+      if (event.candidate && this.onSendMessage) {
+        this.onSendMessage({
+          type: 'webrtc-ice-candidate',
+          roomId: this.roomId,
+          targetPeerId: peerId,
+          candidate: event.candidate,
+        });
       }
     };
 
@@ -92,6 +103,63 @@ export class WebRTCManager {
       if (this.onRemoteStreamRemoved) {
         this.onRemoteStreamRemoved(peerId);
       }
+    }
+  }
+
+  // Handle incoming WebSocket messages
+  async handleWebSocketMessage(message: any): Promise<void> {
+    switch (message.type) {
+      case 'webrtc-offer':
+        if (message.targetPeerId === this.myPeerId) {
+          await this.handleIncomingOffer(message.offer, message.peerId);
+        }
+        break;
+        
+      case 'webrtc-answer':
+        if (message.targetPeerId === this.myPeerId) {
+          await this.handleAnswer(message.peerId, message.answer);
+        }
+        break;
+        
+      case 'webrtc-ice-candidate':
+        if (message.targetPeerId === this.myPeerId) {
+          await this.handleIceCandidate(message.peerId, message.candidate);
+        }
+        break;
+    }
+  }
+
+  // Create and send offer to a new peer
+  async initiateConnection(peerId: string): Promise<void> {
+    try {
+      const offer = await this.createOffer(peerId);
+      if (this.onSendMessage) {
+        this.onSendMessage({
+          type: 'webrtc-offer',
+          roomId: this.roomId,
+          targetPeerId: peerId,
+          offer,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to initiate connection:', error);
+    }
+  }
+
+  // Handle incoming offer from a peer
+  private async handleIncomingOffer(offer: RTCSessionDescriptionInit, fromPeerId: string): Promise<void> {
+    try {
+      const answer = await this.createAnswer(fromPeerId, offer);
+      if (this.onSendMessage) {
+        this.onSendMessage({
+          type: 'webrtc-answer',
+          roomId: this.roomId,
+          targetPeerId: fromPeerId,
+          answer,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to handle incoming offer:', error);
     }
   }
 

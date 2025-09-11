@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { WSMessage, Participant } from "@shared/schema";
 
-export function useWebSocket(roomId: string, username: string) {
+export function useWebSocket(roomId: string, username: string, onWebRTCMessage?: (message: any) => void) {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -74,10 +74,18 @@ export function useWebSocket(roomId: string, username: string) {
         
       case 'participant-joined':
         setParticipants(prev => [...prev, data.participant]);
+        // Trigger WebRTC connection to new peer
+        if (onWebRTCMessage) {
+          onWebRTCMessage({ type: 'peer-joined', peerId: data.participant.peerId });
+        }
         break;
         
       case 'participant-left':
         setParticipants(prev => prev.filter(p => p.peerId !== data.peerId));
+        // Handle peer disconnection
+        if (onWebRTCMessage) {
+          onWebRTCMessage({ type: 'peer-left', peerId: data.peerId });
+        }
         break;
         
       case 'participant-updated':
@@ -92,6 +100,15 @@ export function useWebSocket(roomId: string, username: string) {
               : p
           )
         );
+        break;
+        
+      case 'webrtc-offer':
+      case 'webrtc-answer':
+      case 'webrtc-ice-candidate':
+        // Forward WebRTC signaling messages
+        if (onWebRTCMessage) {
+          onWebRTCMessage(data);
+        }
         break;
         
       case 'error':

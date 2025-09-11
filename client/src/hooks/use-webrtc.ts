@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { WebRTCManager } from "@/lib/webrtc";
+import type { WSMessage } from "@shared/schema";
 
-export function useWebRTC() {
+export function useWebRTC(sendMessage?: (message: WSMessage) => void, peerId?: string) {
   const [, setLocation] = useLocation();
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
@@ -26,14 +27,17 @@ export function useWebRTC() {
       
       setLocalStream(stream);
       
-      if (!webrtcManager.current) {
-        webrtcManager.current = new WebRTCManager(stream);
+      if (!webrtcManager.current && peerId && sendMessage) {
+        const roomId = window.location.pathname.split('/')[2]; // Get room ID from URL
+        webrtcManager.current = new WebRTCManager(stream, peerId, roomId);
+        
         webrtcManager.current.onRemoteStream = (peerId, stream) => {
           setRemoteStreams(prev => ({
             ...prev,
             [peerId]: stream,
           }));
         };
+        
         webrtcManager.current.onRemoteStreamRemoved = (peerId) => {
           setRemoteStreams(prev => {
             const newStreams = { ...prev };
@@ -41,6 +45,8 @@ export function useWebRTC() {
             return newStreams;
           });
         };
+        
+        webrtcManager.current.onSendMessage = sendMessage;
       }
     } catch (error) {
       console.error("Failed to get user media:", error);
