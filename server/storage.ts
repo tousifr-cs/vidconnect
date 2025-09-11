@@ -71,6 +71,9 @@ export class MemStorage implements IStorage {
       ...insertParticipant,
       id,
       joinedAt: new Date(),
+      audioEnabled: insertParticipant.audioEnabled ?? true,
+      videoEnabled: insertParticipant.videoEnabled ?? true,
+      isHost: insertParticipant.isHost ?? false,
     };
     this.participants.set(id, participant);
     return participant;
@@ -90,7 +93,8 @@ export class MemStorage implements IStorage {
   }
 
   async removeParticipantByPeerId(peerId: string): Promise<void> {
-    for (const [id, participant] of this.participants.entries()) {
+    const participantEntries = Array.from(this.participants.entries());
+    for (const [id, participant] of participantEntries) {
       if (participant.peerId === peerId) {
         this.participants.delete(id);
         break;

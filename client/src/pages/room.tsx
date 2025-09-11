@@ -7,14 +7,18 @@ import { ParticipantsPanel } from "@/components/participants-panel";
 import { useWebRTC } from "@/hooks/use-webrtc";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Video, Settings, Copy, Clock, Circle } from "lucide-react";
+import { Video, Settings, Copy, Clock, Circle, User } from "lucide-react";
 import type { Participant } from "@shared/schema";
 
 export default function Room() {
   const [, params] = useRoute("/room/:roomId");
   const roomId = params?.roomId;
-  const [username] = useState("User"); // In a real app, this would come from user input
+  const [username, setUsername] = useState("");
+  const [showUsernameDialog, setShowUsernameDialog] = useState(true);
+  const [tempUsername, setTempUsername] = useState("");
   const [showParticipants, setShowParticipants] = useState(false);
   const [meetingDuration, setMeetingDuration] = useState("00:00");
   const { toast } = useToast();
@@ -99,8 +103,63 @@ export default function Room() {
     }
   };
 
+  const handleJoinRoom = () => {
+    if (tempUsername.trim()) {
+      setUsername(tempUsername.trim());
+      setShowUsernameDialog(false);
+    } else {
+      toast({
+        title: "Error",
+        description: "Please enter your name",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (!roomId) {
     return <div>Invalid room ID</div>;
+  }
+
+  // Show username dialog if username is not set
+  if (showUsernameDialog || !username) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Dialog open={showUsernameDialog} onOpenChange={() => {}}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center space-x-2">
+                <User size={20} />
+                <span>Join Meeting</span>
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label htmlFor="username" className="text-sm font-medium">
+                  Enter your name
+                </label>
+                <Input
+                  id="username"
+                  placeholder="Your name"
+                  value={tempUsername}
+                  onChange={(e) => setTempUsername(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleJoinRoom()}
+                  data-testid="input-username"
+                  autoFocus
+                />
+              </div>
+              <div className="text-sm text-muted-foreground">
+                <p>Meeting ID: <span className="font-mono">{roomId}</span></p>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button onClick={handleJoinRoom} data-testid="button-join-room">
+                Join Meeting
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
   }
 
   return (
@@ -160,7 +219,7 @@ export default function Room() {
                 stream={localStream}
                 participant={{
                   id: 'local',
-                  username: 'You',
+                  username: username || 'You',
                   peerId: 'local',
                   isHost: true,
                   audioEnabled: isAudioEnabled,

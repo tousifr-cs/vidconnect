@@ -17,14 +17,16 @@ export function useWebSocket(roomId: string, username: string) {
     wsRef.current = ws;
 
     ws.onopen = () => {
+      console.log('WebSocket connected to:', wsUrl);
       setIsConnected(true);
       // Join the room
-      sendMessage({
-        type: 'join-room',
+      const joinMessage = {
+        type: 'join-room' as const,
         roomId,
         username,
         peerId: peerIdRef.current,
-      });
+      };
+      ws.send(JSON.stringify(joinMessage));
     };
 
     ws.onmessage = (event) => {
@@ -41,17 +43,18 @@ export function useWebSocket(roomId: string, username: string) {
     };
 
     ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
+      console.error("WebSocket error:", error, "URL:", wsUrl);
       setIsConnected(false);
     };
 
     return () => {
       if (ws.readyState === WebSocket.OPEN) {
-        sendMessage({
-          type: 'leave-room',
+        const leaveMessage = {
+          type: 'leave-room' as const,
           roomId,
           peerId: peerIdRef.current,
-        });
+        };
+        ws.send(JSON.stringify(leaveMessage));
       }
       ws.close();
     };
