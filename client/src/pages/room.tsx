@@ -27,6 +27,7 @@ export default function Room() {
 
   const {
     participants,
+    chatMessages,
     isConnected,
     sendMessage,
     peerId
@@ -304,6 +305,7 @@ export default function Room() {
             roomId={roomId}
             username={username}
             peerId={peerId || ''}
+            messages={chatMessages}
             isVisible={showChat}
             onToggle={() => setShowChat(!showChat)}
             onSendMessage={sendMessage}

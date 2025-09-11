@@ -18,21 +18,21 @@ interface ChatPanelProps {
   roomId: string;
   username: string;
   peerId: string;
+  messages: ChatMessage[];
   isVisible: boolean;
   onToggle: () => void;
   onSendMessage?: (message: WSMessage) => void;
-  onChatMessage?: (message: ChatMessage) => void;
 }
 
 export function ChatPanel({ 
   roomId, 
   username, 
   peerId,
+  messages,
   isVisible, 
   onToggle,
   onSendMessage,
 }: ChatPanelProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -67,28 +67,8 @@ export function ChatPanel({
     }
   };
 
-  // Expose method to add messages from parent
-  useEffect(() => {
-    (window as any).addChatMessage = (message: ChatMessage) => {
-      setMessages(prev => [...prev, message]);
-    };
-  }, []);
-
-  const addMessage = (message: ChatMessage) => {
-    setMessages(prev => [...prev, message]);
-  };
-
-  // Expose addMessage to parent
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any)[`addChatMessage_${roomId}`] = addMessage;
-    }
-  }, [roomId]);
-
-  if (!isVisible) return null;
-
   return (
-    <div className="w-80 bg-card border-l border-border flex flex-col h-full">
+    <div className={`w-80 bg-card border-l border-border flex flex-col h-full ${!isVisible ? 'hidden' : ''}`}>
       {/* Chat Header */}
       <div className="p-4 border-b border-border flex items-center justify-between">
         <h3 className="font-semibold text-foreground flex items-center" data-testid="text-chat-title">

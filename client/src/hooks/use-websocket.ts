@@ -1,8 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import type { WSMessage, Participant } from "@shared/schema";
 
+interface ChatMessage {
+  id: string;
+  peerId: string;
+  username: string;
+  message: string;
+  timestamp: number;
+  isOwn: boolean;
+}
+
 export function useWebSocket(roomId: string, username: string, onWebRTCMessage?: (message: any) => void) {
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const peerIdRef = useRef<string>(`peer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
@@ -128,20 +138,15 @@ export function useWebSocket(roomId: string, username: string, onWebRTCMessage?:
         
       case 'chat-message-received':
         // Handle incoming chat messages
-        if (typeof window !== 'undefined') {
-          const roomId = window.location.pathname.split('/')[2];
-          const addChatMessage = (window as any)[`addChatMessage_${roomId}`];
-          if (addChatMessage) {
-            addChatMessage({
-              id: data.id,
-              peerId: data.peerId,
-              username: data.username,
-              message: data.message,
-              timestamp: data.timestamp,
-              isOwn: data.peerId === peerIdRef.current,
-            });
-          }
-        }
+        const newChatMessage: ChatMessage = {
+          id: data.id,
+          peerId: data.peerId,
+          username: data.username,
+          message: data.message,
+          timestamp: data.timestamp,
+          isOwn: data.peerId === peerIdRef.current,
+        };
+        setChatMessages(prev => [...prev, newChatMessage]);
         break;
         
       case 'error':
@@ -155,6 +160,7 @@ export function useWebSocket(roomId: string, username: string, onWebRTCMessage?:
 
   return {
     participants,
+    chatMessages,
     isConnected,
     sendMessage,
     peerId: peerIdRef.current,

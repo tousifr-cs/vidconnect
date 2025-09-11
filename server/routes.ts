@@ -76,7 +76,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             break;
 
           case 'chat-message':
-            await handleChatMessage(message, clients);
+            await handleChatMessage(ws, message, clients);
             break;
         }
       } catch (error) {
@@ -235,25 +235,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   async function handleChatMessage(
+    ws: WebSocketClient,
     message: Extract<typeof wsMessageSchema._type, { type: 'chat-message' }>,
     clients: Map<string, WebSocketClient>
   ) {
-    const { roomId, peerId, username, message: chatText, timestamp } = message;
+    // Enforce server-side identity and room validation
+    const senderPeerId = ws.peerId;
+    const senderRoomId = ws.roomId;
+    const { username, message: chatText } = message;
+    
+    if (!senderPeerId || !senderRoomId) {
+      return; // Invalid sender connection
+    }
+
+    // Get sender participant for username validation
+    const participant = await storage.getParticipantByPeerId(senderPeerId);
+    if (!participant || participant.roomId !== senderRoomId) {
+      return; // Participant not found or room mismatch
+    }
+    
+    // Generate server-controlled message data
+    const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const serverTimestamp = Date.now();
     
     // Broadcast chat message to all participants in the room
     const roomClients = Array.from(clients.values()).filter(
-      client => client.roomId === roomId
+      client => client.roomId === senderRoomId
     );
 
     roomClients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({
           type: 'chat-message-received',
-          peerId,
-          username,
+          peerId: senderPeerId,
+          username: participant.username, // Use server-validated username
           message: chatText,
-          timestamp,
-          id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: serverTimestamp,
+          id: messageId,
         }));
       }
     });
