@@ -45,6 +45,7 @@ export class WebRTCManager {
           type: 'webrtc-ice-candidate',
           roomId: this.roomId,
           targetPeerId: peerId,
+          peerId: this.myPeerId,
           candidate: event.candidate,
         });
       }
@@ -138,6 +139,7 @@ export class WebRTCManager {
           type: 'webrtc-offer',
           roomId: this.roomId,
           targetPeerId: peerId,
+          peerId: this.myPeerId,
           offer,
         });
       }
@@ -155,12 +157,37 @@ export class WebRTCManager {
           type: 'webrtc-answer',
           roomId: this.roomId,
           targetPeerId: fromPeerId,
+          peerId: this.myPeerId,
           answer,
         });
       }
     } catch (error) {
       console.error('Failed to handle incoming offer:', error);
     }
+  }
+
+  // Replace video track for all peer connections (used for screen sharing)
+  replaceVideoTrack(newVideoTrack: MediaStreamTrack): void {
+    this.peerConnections.forEach(async (peerConnection, peerId) => {
+      try {
+        const sender = peerConnection.getSenders().find(s => 
+          s.track && s.track.kind === 'video'
+        );
+        
+        if (sender) {
+          await sender.replaceTrack(newVideoTrack);
+        }
+      } catch (error) {
+        console.error(`Failed to replace video track for peer ${peerId}:`, error);
+      }
+    });
+    
+    // Update local stream reference
+    const oldVideoTrack = this.localStream.getVideoTracks()[0];
+    if (oldVideoTrack) {
+      this.localStream.removeTrack(oldVideoTrack);
+    }
+    this.localStream.addTrack(newVideoTrack);
   }
 
   cleanup(): void {

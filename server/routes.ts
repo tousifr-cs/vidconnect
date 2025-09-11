@@ -68,11 +68,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'webrtc-offer':
           case 'webrtc-answer':
           case 'webrtc-ice-candidate':
-            await handleWebRTCSignaling(message, clients);
+            await handleWebRTCSignaling(ws, message, clients);
             break;
             
           case 'participant-update':
             await handleParticipantUpdate(message, clients);
+            break;
+
+          case 'chat-message':
+            await handleChatMessage(message, clients);
             break;
         }
       } catch (error) {
@@ -167,13 +171,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   async function handleWebRTCSignaling(
+    ws: WebSocketClient,
     message: Extract<typeof wsMessageSchema._type, { type: 'webrtc-offer' | 'webrtc-answer' | 'webrtc-ice-candidate' }>,
     clients: Map<string, WebSocketClient>
   ) {
-    const targetClient = clients.get(message.targetPeerId);
+    // Enforce sender identity from WebSocket connection, not client message
+    const senderPeerId = ws.peerId;
+    const senderRoomId = ws.roomId;
+    const { targetPeerId } = message;
     
-    if (targetClient && targetClient.readyState === WebSocket.OPEN) {
-      targetClient.send(JSON.stringify(message));
+    if (!senderPeerId || !senderRoomId) {
+      return; // Invalid sender connection
+    }
+    
+    const targetClient = clients.get(targetPeerId);
+    
+    // Validate target is in the same room as sender
+    if (targetClient && 
+        targetClient.roomId === senderRoomId &&
+        targetClient.readyState === WebSocket.OPEN) {
+      
+      // Forward message with server-enforced sender identity
+      const forwardedMessage = {
+        ...message,
+        peerId: senderPeerId,
+        roomId: senderRoomId,
+      };
+      
+      targetClient.send(JSON.stringify(forwardedMessage));
     }
   }
 
@@ -207,6 +232,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
     }
+  }
+
+  async function handleChatMessage(
+    message: Extract<typeof wsMessageSchema._type, { type: 'chat-message' }>,
+    clients: Map<string, WebSocketClient>
+  ) {
+    const { roomId, peerId, username, message: chatText, timestamp } = message;
+    
+    // Broadcast chat message to all participants in the room
+    const roomClients = Array.from(clients.values()).filter(
+      client => client.roomId === roomId
+    );
+
+    roomClients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({
+          type: 'chat-message-received',
+          peerId,
+          username,
+          message: chatText,
+          timestamp,
+          id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        }));
+      }
+    });
   }
 
   async function handleDisconnect(

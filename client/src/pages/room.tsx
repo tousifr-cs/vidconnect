@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { VideoTile } from "@/components/video-tile";
 import { ControlBar } from "@/components/control-bar";
 import { ParticipantsPanel } from "@/components/participants-panel";
+import { ChatPanel } from "@/components/chat-panel";
 import { useWebRTC } from "@/hooks/use-webrtc";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export default function Room() {
   const [showUsernameDialog, setShowUsernameDialog] = useState(true);
   const [tempUsername, setTempUsername] = useState("");
   const [showParticipants, setShowParticipants] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [meetingDuration, setMeetingDuration] = useState("00:00");
   const { toast } = useToast();
 
@@ -35,28 +37,35 @@ export default function Room() {
     remoteStreams, 
     isAudioEnabled, 
     isVideoEnabled,
+    isScreenSharing,
     toggleAudio,
     toggleVideo,
+    toggleScreenShare,
     endCall,
-    webrtcManager
+    webrtcManager,
+    webrtcManagerRef
   } = useWebRTC(sendMessage, peerId);
 
   // Handle WebRTC signaling messages
   function handleWebRTCMessage(message: any) {
-    if (webrtcManager) {
+    const manager = webrtcManagerRef.current;
+    if (manager) {
       switch (message.type) {
         case 'peer-joined':
           // Initiate connection to new peer
-          webrtcManager.initiateConnection(message.peerId);
+          manager.initiateConnection(message.peerId);
           break;
         case 'peer-left':
           // Remove peer connection
-          webrtcManager.removePeerConnection(message.peerId);
+          manager.removePeerConnection(message.peerId);
           break;
         default:
           // Handle WebRTC signaling messages
-          webrtcManager.handleWebSocketMessage(message);
+          manager.handleWebSocketMessage(message);
       }
+    } else {
+      // Queue message if manager not ready yet
+      console.warn('WebRTC manager not ready, queuing message:', message.type);
     }
   }
 
@@ -102,11 +111,11 @@ export default function Room() {
 
   const handleToggleAudio = () => {
     toggleAudio();
-    if (sendMessage) {
+    if (sendMessage && peerId) {
       sendMessage({
         type: 'participant-update',
         roomId: roomId!,
-        peerId: 'local', // In real implementation, this would be the actual peer ID
+        peerId: peerId,
         audioEnabled: !isAudioEnabled,
       });
     }
@@ -114,11 +123,11 @@ export default function Room() {
 
   const handleToggleVideo = () => {
     toggleVideo();
-    if (sendMessage) {
+    if (sendMessage && peerId) {
       sendMessage({
         type: 'participant-update',
         roomId: roomId!,
-        peerId: 'local',
+        peerId: peerId,
         videoEnabled: !isVideoEnabled,
       });
     }
@@ -281,12 +290,25 @@ export default function Room() {
           </div>
         </div>
 
-        {/* Sidebar - Participants Panel */}
-        <ParticipantsPanel
-          participants={participants}
-          isVisible={showParticipants}
-          onToggle={() => setShowParticipants(!showParticipants)}
-        />
+        {/* Sidebars */}
+        <div className="flex">
+          {/* Participants Panel */}
+          <ParticipantsPanel
+            participants={participants}
+            isVisible={showParticipants}
+            onToggle={() => setShowParticipants(!showParticipants)}
+          />
+          
+          {/* Chat Panel */}
+          <ChatPanel
+            roomId={roomId}
+            username={username}
+            peerId={peerId || ''}
+            isVisible={showChat}
+            onToggle={() => setShowChat(!showChat)}
+            onSendMessage={sendMessage}
+          />
+        </div>
       </div>
 
       {/* Control Bar */}
@@ -294,10 +316,13 @@ export default function Room() {
         roomId={roomId}
         isAudioEnabled={isAudioEnabled}
         isVideoEnabled={isVideoEnabled}
+        isScreenSharing={isScreenSharing}
         onToggleAudio={handleToggleAudio}
         onToggleVideo={handleToggleVideo}
+        onToggleScreenShare={toggleScreenShare}
         onEndCall={endCall}
         onToggleParticipants={() => setShowParticipants(!showParticipants)}
+        onToggleChat={() => setShowChat(!showChat)}
       />
     </div>
   );

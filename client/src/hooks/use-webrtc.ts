@@ -9,6 +9,7 @@ export function useWebRTC(sendMessage?: (message: WSMessage) => void, peerId?: s
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const webrtcManager = useRef<WebRTCManager | null>(null);
 
   useEffect(() => {
@@ -71,6 +72,77 @@ export function useWebRTC(sendMessage?: (message: WSMessage) => void, peerId?: s
     }
   };
 
+  const startScreenShare = async () => {
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ 
+        video: true,
+        audio: true 
+      });
+      
+      // Replace video track in peer connections
+      if (webrtcManager.current && localStream) {
+        const videoTrack = screenStream.getVideoTracks()[0];
+        if (videoTrack) {
+          // Replace video track for all peer connections
+          webrtcManager.current.replaceVideoTrack(videoTrack);
+          
+          // Replace local stream video track
+          const oldVideoTrack = localStream.getVideoTracks()[0];
+          if (oldVideoTrack) {
+            localStream.removeTrack(oldVideoTrack);
+            oldVideoTrack.stop();
+          }
+          localStream.addTrack(videoTrack);
+          
+          setIsScreenSharing(true);
+          
+          // Listen for screen share end
+          videoTrack.onended = () => {
+            stopScreenShare();
+          };
+        }
+      }
+    } catch (error) {
+      console.error("Failed to start screen sharing:", error);
+    }
+  };
+
+  const stopScreenShare = async () => {
+    try {
+      // Get camera stream back
+      const cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false // Don't replace audio track
+      });
+      
+      const videoTrack = cameraStream.getVideoTracks()[0];
+      if (videoTrack && webrtcManager.current && localStream) {
+        // Replace screen share track with camera track
+        webrtcManager.current.replaceVideoTrack(videoTrack);
+        
+        // Replace in local stream
+        const oldVideoTrack = localStream.getVideoTracks()[0];
+        if (oldVideoTrack) {
+          localStream.removeTrack(oldVideoTrack);
+          oldVideoTrack.stop();
+        }
+        localStream.addTrack(videoTrack);
+        
+        setIsScreenSharing(false);
+      }
+    } catch (error) {
+      console.error("Failed to stop screen sharing:", error);
+    }
+  };
+
+  const toggleScreenShare = () => {
+    if (isScreenSharing) {
+      stopScreenShare();
+    } else {
+      startScreenShare();
+    }
+  };
+
   const endCall = () => {
     cleanup();
     setLocation("/");
@@ -98,9 +170,12 @@ export function useWebRTC(sendMessage?: (message: WSMessage) => void, peerId?: s
     remoteStreams,
     isAudioEnabled,
     isVideoEnabled,
+    isScreenSharing,
     toggleAudio,
     toggleVideo,
+    toggleScreenShare,
     endCall,
     webrtcManager: webrtcManager.current,
+    webrtcManagerRef: webrtcManager,
   };
 }

@@ -52,18 +52,21 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("webrtc-offer"),
     roomId: z.string(),
     targetPeerId: z.string(),
+    peerId: z.string(),
     offer: z.any(),
   }),
   z.object({
     type: z.literal("webrtc-answer"),
     roomId: z.string(),
     targetPeerId: z.string(),
+    peerId: z.string(),
     answer: z.any(),
   }),
   z.object({
     type: z.literal("webrtc-ice-candidate"),
     roomId: z.string(),
     targetPeerId: z.string(),
+    peerId: z.string(),
     candidate: z.any(),
   }),
   z.object({
@@ -72,6 +75,14 @@ export const wsMessageSchema = z.discriminatedUnion("type", [
     peerId: z.string(),
     audioEnabled: z.boolean().optional(),
     videoEnabled: z.boolean().optional(),
+  }),
+  z.object({
+    type: z.literal("chat-message"),
+    roomId: z.string(),
+    peerId: z.string(),
+    username: z.string(),
+    message: z.string(),
+    timestamp: z.number(),
   }),
 ]);
 

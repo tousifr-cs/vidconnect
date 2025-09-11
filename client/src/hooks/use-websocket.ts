@@ -6,6 +6,12 @@ export function useWebSocket(roomId: string, username: string, onWebRTCMessage?:
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const peerIdRef = useRef<string>(`peer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+  const webrtcCallbackRef = useRef(onWebRTCMessage);
+
+  // Keep callback reference up to date
+  useEffect(() => {
+    webrtcCallbackRef.current = onWebRTCMessage;
+  }, [onWebRTCMessage]);
 
   useEffect(() => {
     if (!roomId || !username) return;
@@ -69,22 +75,31 @@ export function useWebSocket(roomId: string, username: string, onWebRTCMessage?:
   const handleMessage = (data: any) => {
     switch (data.type) {
       case 'room-joined':
-        setParticipants(data.participants || []);
+        const existingParticipants = data.participants || [];
+        setParticipants(existingParticipants);
+        
+        // Initiate connections to all existing participants (excluding self)
+        const myPeerId = peerIdRef.current;
+        if (webrtcCallbackRef.current) {
+          existingParticipants
+            .filter((p: Participant) => p.peerId !== myPeerId)
+            .forEach((participant: Participant) => {
+              webrtcCallbackRef.current!({ type: 'peer-joined', peerId: participant.peerId });
+            });
+        }
         break;
         
       case 'participant-joined':
         setParticipants(prev => [...prev, data.participant]);
-        // Trigger WebRTC connection to new peer
-        if (onWebRTCMessage) {
-          onWebRTCMessage({ type: 'peer-joined', peerId: data.participant.peerId });
-        }
+        // Only new joiners initiate connections to avoid offer glare
+        // Existing participants don't initiate - the new joiner handles all connections
         break;
         
       case 'participant-left':
         setParticipants(prev => prev.filter(p => p.peerId !== data.peerId));
         // Handle peer disconnection
-        if (onWebRTCMessage) {
-          onWebRTCMessage({ type: 'peer-left', peerId: data.peerId });
+        if (webrtcCallbackRef.current) {
+          webrtcCallbackRef.current({ type: 'peer-left', peerId: data.peerId });
         }
         break;
         
@@ -106,8 +121,26 @@ export function useWebSocket(roomId: string, username: string, onWebRTCMessage?:
       case 'webrtc-answer':
       case 'webrtc-ice-candidate':
         // Forward WebRTC signaling messages
-        if (onWebRTCMessage) {
-          onWebRTCMessage(data);
+        if (webrtcCallbackRef.current) {
+          webrtcCallbackRef.current(data);
+        }
+        break;
+        
+      case 'chat-message-received':
+        // Handle incoming chat messages
+        if (typeof window !== 'undefined') {
+          const roomId = window.location.pathname.split('/')[2];
+          const addChatMessage = (window as any)[`addChatMessage_${roomId}`];
+          if (addChatMessage) {
+            addChatMessage({
+              id: data.id,
+              peerId: data.peerId,
+              username: data.username,
+              message: data.message,
+              timestamp: data.timestamp,
+              isOwn: data.peerId === peerIdRef.current,
+            });
+          }
         }
         break;
         
